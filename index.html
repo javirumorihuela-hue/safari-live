@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Asistente Live - Latencia Cero</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #000; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #111; border: 1px solid #333; padding: 2rem; border-radius: 20px; text-align: center; width: 400px; }
+        .btn { background: #00ff7f; color: #000; border: none; padding: 1rem 2rem; border-radius: 50px; font-weight: bold; cursor: pointer; font-size: 1.1rem; width: 100%; transition: 0.3s; }
+        .btn:hover { background: #00cc66; transform: scale(1.02); }
+        #status { margin: 1.5rem 0; font-size: 0.9rem; color: #888; }
+        #console { background: #1a1a1a; color: #00ff00; font-family: monospace; font-size: 10px; padding: 10px; height: 100px; overflow-y: auto; text-align: left; margin-top: 1rem; border-radius: 10px; border: 1px solid #222; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2 style="margin-top:0;">Gemini 3.1 Live 🚀</h2>
+    <div id="status">Esperando conexión...</div>
+    <button class="btn" id="btnIniciar">Iniciar Llamada de Voz</button>
+    <div id="console">Iniciando logs...</div>
+</div>
+
+<script>
+    // Usamos la versión v1alpha para velocidad máxima (Live API)
+    const API_KEY = "AIzaSyDPzosdOu1L08WXKRFH0Rf4BEEachFXnUY"; 
+	const MODEL = "models/gemini-2.0-flash-exp";
+    const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
+
+    let ws;
+    let audioCtx;
+    const log = (m) => { const c = document.getElementById('console'); c.innerHTML += `> ${m}<br>`; c.scrollTop = 999; };
+
+    document.getElementById('btnIniciar').onclick = async () => {
+        log("Pidiendo micrófono...");
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            ws = new WebSocket(URL);
+
+            ws.onopen = () => {
+                log("Micro OK. Conectando a Google...");
+                document.getElementById('status').innerText = "CONECTADO - IA ESCUCHANDO";
+                
+                // Configuración Live
+                ws.send(JSON.stringify({
+                    setup: { 
+                        model: MODEL,
+                        system_instruction: { parts: [{ text: "Eres un tutor experto. Responde siempre por voz de forma ultra breve y rápida. Ayuda al alumno con sus dudas." }] }
+                    }
+                }));
+
+                // Captura de Audio PCM (Necesario para v1alpha)
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                const source = audioCtx.createMediaStreamSource(stream);
+                const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+                source.connect(processor);
+                processor.connect(audioCtx.destination);
+
+                processor.onaudioprocess = (e) => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcmData = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) pcmData[i] = inputData[i] * 0x7FFF;
+                        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+                        ws.send(JSON.stringify({ realtime_input: { media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: base64Audio }] } }));
+                    }
+                };
+            };
+
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+                const audioData = data.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                if (audioData) {
+                    playResponse(audioData);
+                }
+            };
+
+            ws.onclose = () => { log("Conexión cerrada."); document.getElementById('status').innerText = "Desconectado"; };
+            ws.onerror = (e) => { log("ERROR: Bloqueo de conexión (WebSocket)"); }; //
+
+        } catch (err) { log("Error: " + err.message); }
+    };
+
+    function playResponse(base64) {
+        const audioData = atob(base64);
+        const arrayBuffer = new ArrayBuffer(audioData.length);
+        const view = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < audioData.length; i++) view[i] = audioData.charCodeAt(i);
+        
+        const playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        playCtx.decodeAudioData(arrayBuffer, (buffer) => {
+            const source = playCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(playCtx.destination);
+            source.start();
+        });
+    }
+</script>
+</body>
+</html>
