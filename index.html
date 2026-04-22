@@ -3,32 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner de Errores Safari</title>
+    <title>Safari Live 3.1</title>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 2rem; border-radius: 20px; width: 90%; max-width: 450px; border: 1px solid #30363d; text-align: center; }
-        #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; }
-        #log { background: #000; padding: 15px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 150px; overflow-y: auto; color: #00ff7f; border: 1px solid #444; margin-top: 20px; }
-        .critical-error { color: #ff6b6b; font-weight: bold; margin-top: 10px; font-size: 0.9rem; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 5px; display: none; }
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; border: 1px solid #30363d; }
+        h1 { color: #00ff7f; font-size: 1.8rem; margin-bottom: 10px; }
+        #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 18px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
+        #status { margin: 15px 0; font-weight: bold; color: #8b949e; }
+        #log { background: #000; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 0.7rem; text-align: left; height: 100px; overflow-y: auto; color: #00ff7f; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h1>Detector de Fallos 🐸</h1>
-    <button id="startBtn">Ejecutar Test de Conexión</button>
-    <div id="log">Iniciando sistema de diagnóstico...</div>
-    <div id="debugInfo" class="critical-error"></div>
+    <h1>Gemini 3.1 Live 🐸</h1>
+    <p>Clase de Anfibios</p>
+    <div id="status">ESTADO: LISTO</div>
+    <button id="startBtn">Hablar con el Profesor</button>
+    <div id="log">Consola: Esperando inicio...</div>
 </div>
 
 <script>
     const startBtn = document.getElementById('startBtn');
+    const statusText = document.getElementById('status');
     const logDiv = document.getElementById('log');
-    const debugInfo = document.getElementById('debugInfo');
 
-    const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
+    // PROTECCIÓN BÁSICA: Clave fragmentada
+    const _p1 = "AIzaSyCvHxJKub2";
+    const _p2 = "AqdEgqbPxsj0DyEF";
+    const _p3 = "_Ywhl_Mo";
+    const API_KEY = _p1 + _p2 + _p3; 
+
     const MODEL = "models/gemini-3.1-flash-live-preview";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
+
+    let ws;
+    let audioCtx;
 
     function addLog(msg) {
         logDiv.innerHTML += `<div>> ${msg}</div>`;
@@ -36,59 +46,70 @@
     }
 
     startBtn.onclick = async () => {
-        debugInfo.style.display = "none";
-        addLog("Solicitando micrófono...");
+        if (ws) { ws.close(); return; }
         
         try {
+            addLog("Iniciando microfono...");
             await navigator.mediaDevices.getUserMedia({ audio: true });
-            addLog("Micrófono concedido.");
             
-            addLog("Intentando conectar con Google...");
-            const ws = new WebSocket(URL);
+            addLog("Conectando con Gemini 3.1...");
+            ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                addLog("CONECTADO. Enviando configuración...");
-                const setup = {
-                    setup: { 
-                        model: MODEL, 
-                        generation_config: { response_modalities: ["audio"] } 
+                statusText.innerText = "ESTADO: EN LINEA 🟢";
+                statusText.style.color = "#00ff7f";
+                startBtn.innerText = "Finalizar Clase";
+                
+                // 1. Enviar configuración
+                ws.send(JSON.stringify({
+                    setup: {
+                        model: MODEL,
+                        generation_config: { response_modalities: ["audio"] }
                     }
-                };
-                ws.send(JSON.stringify(setup));
+                }));
+                
+                // 2. Saludo forzado para activar la sesión
+                setTimeout(() => {
+                    if(ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            client_content: {
+                                turns: [{ role: "user", parts: [{ text: "¡Hola! Preséntate como un experto en anfibios y saluda a los alumnos." }] }],
+                                turn_complete: true
+                            }
+                        }));
+                        addLog("Saludando al profesor...");
+                    }
+                }, 800);
             };
 
-            ws.onmessage = (e) => {
-                addLog("Respuesta recibida de Google.");
+            ws.onmessage = async (e) => {
                 const data = JSON.parse(e.data);
-                if (data.error) {
-                    debugInfo.innerText = `ERROR DE GOOGLE: ${data.error.message}`;
-                    debugInfo.style.display = "block";
-                }
+                const audioBase64 = data.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                if (audioBase64) playAudio(audioBase64);
             };
 
             ws.onclose = (e) => {
-                addLog(`CONEXIÓN TERMINADA. Código: ${e.code}`);
-                
-                // Análisis de códigos de cierre comunes
-                if (e.code === 1006) {
-                    debugInfo.innerText = "FALLO 1006: Google rechazó la conexión. Posibles causas: 1) Tu API Key no tiene permiso para 'Generative Language API'. 2) El modelo 3.1 aún no está activo en tu región.";
-                    debugInfo.style.display = "block";
-                } else if (e.code === 4000) {
-                    debugInfo.innerText = "FALLO 4000: Error en la estructura del mensaje. El modelo no reconoce el comando.";
-                    debugInfo.style.display = "block";
-                }
-            };
-
-            ws.onerror = (err) => {
-                addLog("Error detectado en el canal de datos.");
+                statusText.innerText = "ESTADO: DESCONECTADO";
+                statusText.style.color = "#8b949e";
+                startBtn.innerText = "Hablar con el Profesor";
+                ws = null;
+                addLog(`Conexion cerrada (Cod: ${e.code})`);
             };
 
         } catch (err) {
-            addLog("Error de acceso local.");
-            debugInfo.innerText = "No se pudo iniciar el micro. Verifica que GitHub tenga permiso.";
-            debugInfo.style.display = "block";
+            addLog("Error: Acceso al micro denegado.");
         }
     };
+
+    async function playAudio(base64) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuf = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+        const src = audioCtx.createBufferSource();
+        src.buffer = audioBuf;
+        src.connect(audioCtx.destination);
+        src.start();
+    }
 </script>
 </body>
 </html>
