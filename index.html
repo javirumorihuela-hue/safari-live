@@ -10,7 +10,7 @@
         h1 { color: #00ff7f; font-size: 1.8rem; margin-bottom: 10px; }
         #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 18px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
         #status { margin: 15px 0; font-weight: bold; color: #8b949e; }
-        #log { background: #000; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 0.7rem; text-align: left; height: 80px; overflow-y: auto; color: #00ff7f; }
+        #log { background: #000; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 0.7rem; text-align: left; height: 100px; overflow-y: auto; color: #00ff7f; }
     </style>
 </head>
 <body>
@@ -28,7 +28,7 @@
     const statusText = document.getElementById('status');
     const logDiv = document.getElementById('log');
 
-    // CONFIGURACION GEMINI 3.1
+    // CONFIGURACIÓN PARA GEMINI 3.1 PROPORCIONADA POR GOOGLE AI STUDIO
     const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
     const MODEL = "models/gemini-3.1-flash-live-preview";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
@@ -45,18 +45,18 @@
         if (ws) { ws.close(); return; }
         
         try {
-            addLog("Iniciando microfono...");
+            addLog("Iniciando micrófono...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            addLog("Abriendo canal con Gemini 3.1...");
+            addLog("Conectando con el servidor...");
             ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                statusText.innerText = "ESTADO: EN LINEA 🟢";
+                statusText.innerText = "ESTADO: EN LÍNEA 🟢";
                 statusText.style.color = "#00ff7f";
                 startBtn.innerText = "Finalizar Clase";
                 
-                // 1. ENVIAR CONFIGURACION
+                // 1. ENVIAR CONFIGURACIÓN (SETUP)
                 const setup = {
                     setup: {
                         model: MODEL,
@@ -64,19 +64,21 @@
                     }
                 };
                 ws.send(JSON.stringify(setup));
-                addLog("Configuracion aceptada.");
+                addLog("Configuración enviada.");
                 
-                // 2. ENVIAR SALUDO INICIAL (Para forzar a la IA a hablar)
+                // 2. SALUDO INICIAL (Para evitar que la conexión se cierre por inactividad)
                 setTimeout(() => {
-                    const greeting = {
-                        client_content: {
-                            turns: [{ role: "user", parts: [{ text: "Hola profesor, cuéntame algo de los anfibios." }] }],
-                            turn_complete: true
-                        }
-                    };
-                    ws.send(JSON.stringify(greeting));
-                    addLog("Saludando al profesor...");
-                }, 500);
+                    if(ws.readyState === WebSocket.OPEN) {
+                        const greeting = {
+                            client_content: {
+                                turns: [{ role: "user", parts: [{ text: "¡Hola profesor! Cuéntame algo sobre los anfibios." }] }],
+                                turn_complete: true
+                            }
+                        };
+                        ws.send(JSON.stringify(greeting));
+                        addLog("Saludando al profesor...");
+                    }
+                }, 800);
             };
 
             ws.onmessage = async (e) => {
@@ -92,11 +94,13 @@
                 statusText.style.color = "#8b949e";
                 startBtn.innerText = "Hablar con el Profesor";
                 ws = null;
-                addLog("Conexion terminada.");
+                addLog("Conexión terminada.");
             };
 
+            ws.onerror = () => addLog("Error en el WebSocket.");
+
         } catch (err) {
-            addLog("Error: No hay microfono.");
+            addLog("Error: No se pudo acceder al micrófono.");
         }
     };
 
