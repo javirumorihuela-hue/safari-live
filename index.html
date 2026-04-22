@@ -3,116 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Safari Live 3.1</title>
+    <title>Diagnóstico Safari</title>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; border: 1px solid #30363d; }
-        h1 { color: #00ff7f; font-size: 1.8rem; margin-bottom: 10px; }
-        #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 18px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
-        #status { margin: 15px 0; font-weight: bold; color: #8b949e; }
-        #log { background: #000; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 0.7rem; text-align: left; height: 100px; overflow-y: auto; color: #00ff7f; }
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 10px; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 100%; max-width: 450px; border: 1px solid #30363d; box-sizing: border-box; }
+        h1 { color: #00ff7f; margin: 0 0 10px 0; }
+        #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; }
+        .log-box { margin-top: 20px; background: #000; border-radius: 10px; padding: 15px; text-align: left; border: 1px solid #333; }
+        .log-title { color: #8b949e; font-size: 0.8rem; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        #log { font-family: monospace; font-size: 0.75rem; color: #00ff7f; height: 120px; overflow-y: auto; white-space: pre-wrap; }
+        .error-detail { color: #ff6b6b; font-weight: bold; margin-top: 10px; font-size: 0.8rem; border-top: 1px solid #333; padding-top: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h1>Gemini 3.1 Live 🐸</h1>
-    <p>Clase de Anfibios</p>
-    <div id="status">ESTADO: LISTO</div>
-    <button id="startBtn">Hablar con el Profesor</button>
-    <div id="log">Consola: Esperando inicio...</div>
+    <div id="status" style="margin-bottom:15px; color:#8b949e;">ESTADO: LISTO</div>
+    
+    <button id="startBtn">Iniciar Diagnóstico</button>
+
+    <div class="log-box">
+        <div class="log-title">Consola de Eventos</div>
+        <div id="log">Esperando interacción...</div>
+        <div id="errorDetail" class="error-detail">Sin errores detectados todavía.</div>
+    </div>
 </div>
 
 <script>
     const startBtn = document.getElementById('startBtn');
-    const statusText = document.getElementById('status');
     const logDiv = document.getElementById('log');
+    const errorDetail = document.getElementById('errorDetail');
+    const statusText = document.getElementById('status');
 
-    // CONFIGURACIÓN PARA GEMINI 3.1 PROPORCIONADA POR GOOGLE AI STUDIO
     const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
     const MODEL = "models/gemini-3.1-flash-live-preview";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
 
-    let ws;
-    let audioCtx;
-
     function addLog(msg) {
-        logDiv.innerHTML += `<div>> ${msg}</div>`;
+        const t = new Date().toLocaleTimeString();
+        logDiv.innerText += `\n[${t}] ${msg}`;
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
     startBtn.onclick = async () => {
-        if (ws) { ws.close(); return; }
-        
         try {
-            addLog("Iniciando micrófono...");
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            errorDetail.innerText = "Buscando errores...";
+            addLog("Pidiendo micro...");
+            await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            addLog("Conectando con el servidor...");
-            ws = new WebSocket(URL);
+            addLog("Conectando a Google...");
+            const ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                statusText.innerText = "ESTADO: EN LÍNEA 🟢";
-                statusText.style.color = "#00ff7f";
-                startBtn.innerText = "Finalizar Clase";
-                
-                // 1. ENVIAR CONFIGURACIÓN (SETUP)
-                const setup = {
-                    setup: {
-                        model: MODEL,
-                        generation_config: { response_modalities: ["audio"] }
-                    }
-                };
-                ws.send(JSON.stringify(setup));
-                addLog("Configuración enviada.");
-                
-                // 2. SALUDO INICIAL (Para evitar que la conexión se cierre por inactividad)
-                setTimeout(() => {
-                    if(ws.readyState === WebSocket.OPEN) {
-                        const greeting = {
-                            client_content: {
-                                turns: [{ role: "user", parts: [{ text: "¡Hola profesor! Cuéntame algo sobre los anfibios." }] }],
-                                turn_complete: true
-                            }
-                        };
-                        ws.send(JSON.stringify(greeting));
-                        addLog("Saludando al profesor...");
-                    }
-                }, 800);
+                statusText.innerText = "ESTADO: CONECTADO ✅";
+                addLog("Canal abierto. Enviando configuración...");
+                ws.send(JSON.stringify({
+                    setup: { model: MODEL, generation_config: { response_modalities: ["audio"] } }
+                }));
             };
 
             ws.onmessage = async (e) => {
-                const data = JSON.parse(e.data);
-                const audioBase64 = data.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-                if (audioBase64) {
-                    playAudio(audioBase64);
+                const resp = JSON.parse(e.data);
+                addLog("Respuesta recibida.");
+                // Si Google manda un error en el JSON
+                if (resp.error) {
+                    errorDetail.innerText = `ERROR DE API: ${resp.error.message} (${resp.error.status})`;
                 }
             };
 
-            ws.onclose = () => {
-                statusText.innerText = "ESTADO: DESCONECTADO";
-                statusText.style.color = "#8b949e";
-                startBtn.innerText = "Hablar con el Profesor";
-                ws = null;
-                addLog("Conexión terminada.");
+            ws.onerror = (err) => {
+                addLog("Fallo crítico en WebSocket.");
+                errorDetail.innerText = "ERROR: El servidor de Google rechazó la conexión (posible API Key inválida o región bloqueada).";
             };
 
-            ws.onerror = () => addLog("Error en el WebSocket.");
+            ws.onclose = (e) => {
+                statusText.innerText = "ESTADO: DESCONECTADO";
+                addLog(`Conexión cerrada. Código: ${e.code}`);
+                if (e.code === 1006) {
+                    errorDetail.innerText = "CÓDIGO 1006: Google ha cortado la llamada. Esto suele ser por una API Key que no tiene activado 'Generative Language API'.";
+                }
+            };
 
         } catch (err) {
-            addLog("Error: No se pudo acceder al micrófono.");
+            addLog("Error de permisos.");
+            errorDetail.innerText = "ERROR: No has dado permiso al micrófono en la tablet.";
         }
     };
-
-    async function playAudio(base64) {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const arrayBuf = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
-        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
-        const src = audioCtx.createBufferSource();
-        src.buffer = audioBuf;
-        src.connect(audioCtx.destination);
-        src.start();
-    }
 </script>
 </body>
 </html>
