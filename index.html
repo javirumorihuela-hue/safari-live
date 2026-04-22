@@ -3,91 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diagnóstico Safari</title>
+    <title>Scanner de Errores Safari</title>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 10px; }
-        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 100%; max-width: 450px; border: 1px solid #30363d; box-sizing: border-box; }
-        h1 { color: #00ff7f; margin: 0 0 10px 0; }
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; width: 90%; max-width: 450px; border: 1px solid #30363d; text-align: center; }
         #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; }
-        .log-box { margin-top: 20px; background: #000; border-radius: 10px; padding: 15px; text-align: left; border: 1px solid #333; }
-        .log-title { color: #8b949e; font-size: 0.8rem; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        #log { font-family: monospace; font-size: 0.75rem; color: #00ff7f; height: 120px; overflow-y: auto; white-space: pre-wrap; }
-        .error-detail { color: #ff6b6b; font-weight: bold; margin-top: 10px; font-size: 0.8rem; border-top: 1px solid #333; padding-top: 10px; }
+        #log { background: #000; padding: 15px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 150px; overflow-y: auto; color: #00ff7f; border: 1px solid #444; margin-top: 20px; }
+        .critical-error { color: #ff6b6b; font-weight: bold; margin-top: 10px; font-size: 0.9rem; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 5px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h1>Gemini 3.1 Live 🐸</h1>
-    <div id="status" style="margin-bottom:15px; color:#8b949e;">ESTADO: LISTO</div>
-    
-    <button id="startBtn">Iniciar Diagnóstico</button>
-
-    <div class="log-box">
-        <div class="log-title">Consola de Eventos</div>
-        <div id="log">Esperando interacción...</div>
-        <div id="errorDetail" class="error-detail">Sin errores detectados todavía.</div>
-    </div>
+    <h1>Detector de Fallos 🐸</h1>
+    <button id="startBtn">Ejecutar Test de Conexión</button>
+    <div id="log">Iniciando sistema de diagnóstico...</div>
+    <div id="debugInfo" class="critical-error"></div>
 </div>
 
 <script>
     const startBtn = document.getElementById('startBtn');
     const logDiv = document.getElementById('log');
-    const errorDetail = document.getElementById('errorDetail');
-    const statusText = document.getElementById('status');
+    const debugInfo = document.getElementById('debugInfo');
 
     const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
     const MODEL = "models/gemini-3.1-flash-live-preview";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
 
     function addLog(msg) {
-        const t = new Date().toLocaleTimeString();
-        logDiv.innerText += `\n[${t}] ${msg}`;
+        logDiv.innerHTML += `<div>> ${msg}</div>`;
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
     startBtn.onclick = async () => {
+        debugInfo.style.display = "none";
+        addLog("Solicitando micrófono...");
+        
         try {
-            errorDetail.innerText = "Buscando errores...";
-            addLog("Pidiendo micro...");
             await navigator.mediaDevices.getUserMedia({ audio: true });
+            addLog("Micrófono concedido.");
             
-            addLog("Conectando a Google...");
+            addLog("Intentando conectar con Google...");
             const ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                statusText.innerText = "ESTADO: CONECTADO ✅";
-                addLog("Canal abierto. Enviando configuración...");
-                ws.send(JSON.stringify({
-                    setup: { model: MODEL, generation_config: { response_modalities: ["audio"] } }
-                }));
+                addLog("CONECTADO. Enviando configuración...");
+                const setup = {
+                    setup: { 
+                        model: MODEL, 
+                        generation_config: { response_modalities: ["audio"] } 
+                    }
+                };
+                ws.send(JSON.stringify(setup));
             };
 
-            ws.onmessage = async (e) => {
-                const resp = JSON.parse(e.data);
-                addLog("Respuesta recibida.");
-                // Si Google manda un error en el JSON
-                if (resp.error) {
-                    errorDetail.innerText = `ERROR DE API: ${resp.error.message} (${resp.error.status})`;
+            ws.onmessage = (e) => {
+                addLog("Respuesta recibida de Google.");
+                const data = JSON.parse(e.data);
+                if (data.error) {
+                    debugInfo.innerText = `ERROR DE GOOGLE: ${data.error.message}`;
+                    debugInfo.style.display = "block";
+                }
+            };
+
+            ws.onclose = (e) => {
+                addLog(`CONEXIÓN TERMINADA. Código: ${e.code}`);
+                
+                // Análisis de códigos de cierre comunes
+                if (e.code === 1006) {
+                    debugInfo.innerText = "FALLO 1006: Google rechazó la conexión. Posibles causas: 1) Tu API Key no tiene permiso para 'Generative Language API'. 2) El modelo 3.1 aún no está activo en tu región.";
+                    debugInfo.style.display = "block";
+                } else if (e.code === 4000) {
+                    debugInfo.innerText = "FALLO 4000: Error en la estructura del mensaje. El modelo no reconoce el comando.";
+                    debugInfo.style.display = "block";
                 }
             };
 
             ws.onerror = (err) => {
-                addLog("Fallo crítico en WebSocket.");
-                errorDetail.innerText = "ERROR: El servidor de Google rechazó la conexión (posible API Key inválida o región bloqueada).";
-            };
-
-            ws.onclose = (e) => {
-                statusText.innerText = "ESTADO: DESCONECTADO";
-                addLog(`Conexión cerrada. Código: ${e.code}`);
-                if (e.code === 1006) {
-                    errorDetail.innerText = "CÓDIGO 1006: Google ha cortado la llamada. Esto suele ser por una API Key que no tiene activado 'Generative Language API'.";
-                }
+                addLog("Error detectado en el canal de datos.");
             };
 
         } catch (err) {
-            addLog("Error de permisos.");
-            errorDetail.innerText = "ERROR: No has dado permiso al micrófono en la tablet.";
+            addLog("Error de acceso local.");
+            debugInfo.innerText = "No se pudo iniciar el micro. Verifica que GitHub tenga permiso.";
+            debugInfo.style.display = "block";
         }
     };
 </script>
