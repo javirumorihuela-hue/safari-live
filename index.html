@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Safari Anfibios 3.1</title>
+    <title>Safari Live 3.1</title>
     <style>
-        body { background-color: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .container { background-color: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
-        h1 { color: #00ff7f; }
-        button { background-color: #00ff7f; color: #0d1117; border: none; padding: 15px 30px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; margin-top: 1rem; }
-        #status { margin-top: 20px; color: #8b949e; font-weight: bold; }
-        #log { margin-top: 15px; background: #000; padding: 12px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 100px; overflow-y: auto; color: #00ff7f; }
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; border: 1px solid #30363d; }
+        h1 { color: #00ff7f; font-size: 1.8rem; margin-bottom: 10px; }
+        #startBtn { background: #00ff7f; color: #0d1117; border: none; padding: 18px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
+        #status { margin: 15px 0; font-weight: bold; color: #8b949e; }
+        #log { background: #000; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 0.7rem; text-align: left; height: 80px; overflow-y: auto; color: #00ff7f; }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="card">
     <h1>Gemini 3.1 Live 🐸</h1>
     <p>Clase de Anfibios</p>
     <div id="status">ESTADO: LISTO</div>
@@ -28,13 +28,13 @@
     const statusText = document.getElementById('status');
     const logDiv = document.getElementById('log');
 
-    // CONFIGURACION PARA GEMINI 3.1
+    // CONFIGURACION GEMINI 3.1
     const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
-    const MODEL = "models/gemini-3.1-flash-live-preview"; // CAMBIADO A 3.1
+    const MODEL = "models/gemini-3.1-flash-live-preview";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
 
     let ws;
-    let audioContext;
+    let audioCtx;
 
     function addLog(msg) {
         logDiv.innerHTML += `<div>> ${msg}</div>`;
@@ -43,53 +43,71 @@
 
     startBtn.onclick = async () => {
         if (ws) { ws.close(); return; }
+        
         try {
             addLog("Iniciando microfono...");
-            await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
+            addLog("Abriendo canal con Gemini 3.1...");
             ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                statusText.innerText = "ESTADO: CONECTADO ✅";
+                statusText.innerText = "ESTADO: EN LINEA 🟢";
                 statusText.style.color = "#00ff7f";
+                startBtn.innerText = "Finalizar Clase";
                 
-                // MENSAJE DE SETUP PARA 3.1
-                const setup_msg = {
+                // 1. ENVIAR CONFIGURACION
+                const setup = {
                     setup: {
                         model: MODEL,
                         generation_config: { response_modalities: ["audio"] }
                     }
                 };
-                ws.send(JSON.stringify(setup_msg));
-                addLog("Conectado a Gemini 3.1");
+                ws.send(JSON.stringify(setup));
+                addLog("Configuracion aceptada.");
+                
+                // 2. ENVIAR SALUDO INICIAL (Para forzar a la IA a hablar)
+                setTimeout(() => {
+                    const greeting = {
+                        client_content: {
+                            turns: [{ role: "user", parts: [{ text: "Hola profesor, cuéntame algo de los anfibios." }] }],
+                            turn_complete: true
+                        }
+                    };
+                    ws.send(JSON.stringify(greeting));
+                    addLog("Saludando al profesor...");
+                }, 500);
             };
 
-            ws.onmessage = async (event) => {
-                const response = JSON.parse(event.data);
-                if (response.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
-                    playOutputAudio(response.serverContent.modelTurn.parts[0].inlineData.data);
+            ws.onmessage = async (e) => {
+                const data = JSON.parse(e.data);
+                const audioBase64 = data.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                if (audioBase64) {
+                    playAudio(audioBase64);
                 }
             };
 
             ws.onclose = () => {
                 statusText.innerText = "ESTADO: DESCONECTADO";
+                statusText.style.color = "#8b949e";
+                startBtn.innerText = "Hablar con el Profesor";
                 ws = null;
                 addLog("Conexion terminada.");
             };
 
         } catch (err) {
-            addLog("Error al iniciar.");
+            addLog("Error: No hay microfono.");
         }
     };
 
-    async function playOutputAudio(base64Data) {
-        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
+    async function playAudio(base64) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuf = Uint8Array.from(atob(base64), c => c.charCodeAt(0)).buffer;
+        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+        const src = audioCtx.createBufferSource();
+        src.buffer = audioBuf;
+        src.connect(audioCtx.destination);
+        src.start();
     }
 </script>
 </body>
