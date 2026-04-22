@@ -2,99 +2,137 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Asistente Live - Latencia Cero</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safari Anfibios Live</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #000; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #111; border: 1px solid #333; padding: 2rem; border-radius: 20px; text-align: center; width: 400px; }
-        .btn { background: #00ff7f; color: #000; border: none; padding: 1rem 2rem; border-radius: 50px; font-weight: bold; cursor: pointer; font-size: 1.1rem; width: 100%; transition: 0.3s; }
-        .btn:hover { background: #00cc66; transform: scale(1.02); }
-        #status { margin: 1.5rem 0; font-size: 0.9rem; color: #888; }
-        #console { background: #1a1a1a; color: #00ff00; font-family: monospace; font-size: 10px; padding: 10px; height: 100px; overflow-y: auto; text-align: left; margin-top: 1rem; border-radius: 10px; border: 1px solid #222; }
+        body { background-color: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { background-color: #161b22; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 450px; }
+        h1 { color: #00ff7f; margin-bottom: 0.5rem; }
+        button { background-color: #00ff7f; color: #0d1117; border: none; padding: 15px 30px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; transition: all 0.2s; width: 100%; margin-top: 1rem; }
+        button:hover { background-color: #00cd66; }
+        button:active { transform: scale(0.95); }
+        #status { margin-top: 20px; color: #8b949e; font-size: 1rem; font-weight: bold; }
+        #log { margin-top: 15px; background: #000; padding: 12px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 120px; overflow-y: auto; color: #00ff7f; border: 1px solid #30363d; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2 style="margin-top:0;">Gemini 3.1 Live 🚀</h2>
-    <div id="status">Esperando conexión...</div>
-    <button class="btn" id="btnIniciar">Iniciar Llamada de Voz</button>
-    <div id="console">Iniciando logs...</div>
+<div class="container">
+    <h1>Gemini 2.0 Live 🚀</h1>
+    <p>Clase interactiva: Los Anfibios</p>
+    <div id="status">Estado: DESCONECTADO</div>
+    <button id="startBtn">Iniciar Llamada de Voz</button>
+    <div id="log">Consola: Esperando inicio...</div>
 </div>
 
 <script>
-    // Usamos la versión v1alpha para velocidad máxima (Live API)
-    const API_KEY = "AIzaSyDPzosdOu1L08WXKRFH0Rf4BEEachFXnUY"; 
-	const MODEL = "models/gemini-2.0-flash-exp";
+    const startBtn = document.getElementById('startBtn');
+    const statusText = document.getElementById('status');
+    const logDiv = document.getElementById('log');
+
+    // LLAVE Y CONFIGURACION EXTRAIDAS DE TUS CAPTURAS
+    const API_KEY = "AIzaSyBY9lSTUmn6B8kfff4YEqmUAGDJg81aSU8"; 
+    const MODEL = "models/gemini-2.0-flash-exp";
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
 
     let ws;
-    let audioCtx;
-    const log = (m) => { const c = document.getElementById('console'); c.innerHTML += `> ${m}<br>`; c.scrollTop = 999; };
+    let audioContext;
+    let audioWorkletNode;
 
-    document.getElementById('btnIniciar').onclick = async () => {
-        log("Pidiendo micrófono...");
+    function addLog(msg) {
+        const time = new Date().toLocaleTimeString().split(' ')[0];
+        logDiv.innerHTML += `<div>[${time}] > ${msg}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    startBtn.onclick = async () => {
+        if (ws) {
+            ws.close();
+            return;
+        }
+
         try {
+            addLog("Solicitando microfono...");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            addLog("Microfono OK. Conectando WebSocket...");
+            
             ws = new WebSocket(URL);
 
             ws.onopen = () => {
-                log("Micro OK. Conectando a Google...");
-                document.getElementById('status').innerText = "CONECTADO - IA ESCUCHANDO";
+                statusText.innerText = "ESTADO: CONECTADO ✅";
+                statusText.style.color = "#00ff7f";
+                startBtn.innerText = "Finalizar Clase";
+                startBtn.style.backgroundColor = "#ff4500";
                 
-                // Configuración Live
-                ws.send(JSON.stringify({
-                    setup: { 
+                addLog("Conexion establecida con Google.");
+
+                // MENSAJE DE CONFIGURACION INICIAL (SETUP)
+                const setup_msg = {
+                    setup: {
                         model: MODEL,
-                        system_instruction: { parts: [{ text: "Eres un tutor experto. Responde siempre por voz de forma ultra breve y rápida. Ayuda al alumno con sus dudas." }] }
-                    }
-                }));
-
-                // Captura de Audio PCM (Necesario para v1alpha)
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                const source = audioCtx.createMediaStreamSource(stream);
-                const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-                source.connect(processor);
-                processor.connect(audioCtx.destination);
-
-                processor.onaudioprocess = (e) => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        const inputData = e.inputBuffer.getChannelData(0);
-                        const pcmData = new Int16Array(inputData.length);
-                        for (let i = 0; i < inputData.length; i++) pcmData[i] = inputData[i] * 0x7FFF;
-                        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-                        ws.send(JSON.stringify({ realtime_input: { media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: base64Audio }] } }));
+                        generation_config: {
+                            response_modalities: ["audio"]
+                        },
+                        system_instruction: {
+                            parts: [{ text: "Eres un profesor de primaria amable y entusiasta. Tu tema son los anfibios (vertebrados, piel desnuda, oviparos, metamorfosis). Saluda al alumno y explicale algo breve sobre ellos. Responde siempre por voz." }]
+                        }
                     }
                 };
+                
+                ws.send(JSON.stringify(setup_msg));
+                addLog("Configuracion de voz enviada.");
             };
 
             ws.onmessage = async (event) => {
-                const data = JSON.parse(event.data);
-                const audioData = data.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-                if (audioData) {
-                    playResponse(audioData);
+                const response = JSON.parse(event.data);
+                
+                // Procesar respuesta de audio de la IA
+                if (response.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
+                    const base64Audio = response.serverContent.modelTurn.parts[0].inlineData.data;
+                    addLog("Recibiendo respuesta de voz...");
+                    playOutputAudio(base64Audio);
                 }
             };
 
-            ws.onclose = () => { log("Conexión cerrada."); document.getElementById('status').innerText = "Desconectado"; };
-            ws.onerror = (e) => { log("ERROR: Bloqueo de conexión (WebSocket)"); }; //
+            ws.onerror = (error) => {
+                addLog("ERROR: Fallo en la conexion.");
+                console.error("WebSocket Error:", error);
+            };
 
-        } catch (err) { log("Error: " + err.message); }
+            ws.onclose = () => {
+                statusText.innerText = "ESTADO: DESCONECTADO";
+                statusText.style.color = "#8b949e";
+                startBtn.innerText = "Iniciar Llamada de Voz";
+                startBtn.style.backgroundColor = "#00ff7f";
+                ws = null;
+                addLog("Conexion cerrada.");
+            };
+
+        } catch (err) {
+            addLog("Error de permisos: Acceso al microfono denegado.");
+            console.error(err);
+        }
     };
 
-    function playResponse(base64) {
-        const audioData = atob(base64);
-        const arrayBuffer = new ArrayBuffer(audioData.length);
-        const view = new Uint8Array(arrayBuffer);
-        for (let i = 0; i < audioData.length; i++) view[i] = audioData.charCodeAt(i);
-        
-        const playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        playCtx.decodeAudioData(arrayBuffer, (buffer) => {
-            const source = playCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(playCtx.destination);
+    // Funcion para reproducir el audio base64 que devuelve Gemini
+    async function playOutputAudio(base64Data) {
+        try {
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
             source.start();
-        });
+        } catch (e) {
+            addLog("Error al reproducir audio.");
+        }
     }
 </script>
+
 </body>
 </html>
