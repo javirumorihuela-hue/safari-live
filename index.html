@@ -3,24 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Safari Anfibios Live</title>
+    <title>Safari Anfibios 3.1</title>
     <style>
         body { background-color: #0d1117; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .container { background-color: #161b22; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
-        h1 { color: #00ff7f; margin-bottom: 0.5rem; }
-        button { background-color: #00ff7f; color: #0d1117; border: none; padding: 15px 30px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; transition: all 0.2s; width: 100%; margin-top: 1rem; }
-        button:active { transform: scale(0.95); }
-        #status { margin-top: 20px; color: #8b949e; font-size: 1rem; font-weight: bold; text-transform: uppercase; }
-        #log { margin-top: 15px; background: #000; padding: 12px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 120px; overflow-y: auto; color: #00ff7f; border: 1px solid #333; }
+        .container { background-color: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
+        h1 { color: #00ff7f; }
+        button { background-color: #00ff7f; color: #0d1117; border: none; padding: 15px 30px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; margin-top: 1rem; }
+        #status { margin-top: 20px; color: #8b949e; font-weight: bold; }
+        #log { margin-top: 15px; background: #000; padding: 12px; border-radius: 10px; font-family: monospace; font-size: 0.75rem; text-align: left; height: 100px; overflow-y: auto; color: #00ff7f; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Gemini 2.0 Live 🚀</h1>
-    <p>Clase interactiva: Los Anfibios</p>
-    <div id="status">ESTADO: DESCONECTADO</div>
-    <button id="startBtn">Iniciar Llamada de Voz</button>
+    <h1>Gemini 3.1 Live 🐸</h1>
+    <p>Clase de Anfibios</p>
+    <div id="status">ESTADO: LISTO</div>
+    <button id="startBtn">Hablar con el Profesor</button>
     <div id="log">Consola: Esperando inicio...</div>
 </div>
 
@@ -29,73 +28,57 @@
     const statusText = document.getElementById('status');
     const logDiv = document.getElementById('log');
 
-    // NUEVA API KEY PROPORCIONADA
+    // CONFIGURACION PARA GEMINI 3.1
     const API_KEY = "AIzaSyAF5liAJqJRXZiR8POO8IsfJf5qOGXwszI"; 
-    const MODEL = "models/gemini-2.0-flash-exp";
+    const MODEL = "models/gemini-3.1-flash-live-preview"; // CAMBIADO A 3.1
     const URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BiDiGenerateContent?key=${API_KEY}`;
 
     let ws;
     let audioContext;
 
     function addLog(msg) {
-        const time = new Date().toLocaleTimeString().split(' ')[0];
-        logDiv.innerHTML += `<div>[${time}] > ${msg}</div>`;
+        logDiv.innerHTML += `<div>> ${msg}</div>`;
         logDiv.scrollTop = logDiv.scrollHeight;
     }
 
     startBtn.onclick = async () => {
         if (ws) { ws.close(); return; }
-
         try {
-            addLog("Solicitando microfono...");
+            addLog("Iniciando microfono...");
             await navigator.mediaDevices.getUserMedia({ audio: true });
-            addLog("Microfono OK. Conectando...");
             
             ws = new WebSocket(URL);
 
             ws.onopen = () => {
                 statusText.innerText = "ESTADO: CONECTADO ✅";
                 statusText.style.color = "#00ff7f";
-                startBtn.innerText = "Detener";
-                addLog("Conexion establecida con Google.");
-
-                // CONFIGURACION DE INICIO (SETUP)
+                
+                // MENSAJE DE SETUP PARA 3.1
                 const setup_msg = {
                     setup: {
                         model: MODEL,
-                        generation_config: { response_modalities: ["audio"] },
-                        system_instruction: {
-                            parts: [{ text: "Eres un profesor de primaria amable. Tu tema son los anfibios. Saluda y explica algo muy breve por voz." }]
-                        }
+                        generation_config: { response_modalities: ["audio"] }
                     }
                 };
                 ws.send(JSON.stringify(setup_msg));
-                addLog("Configuracion enviada.");
+                addLog("Conectado a Gemini 3.1");
             };
 
             ws.onmessage = async (event) => {
                 const response = JSON.parse(event.data);
                 if (response.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
-                    addLog("IA respondiendo...");
                     playOutputAudio(response.serverContent.modelTurn.parts[0].inlineData.data);
                 }
             };
 
-            ws.onerror = (e) => {
-                addLog("ERROR de conexion.");
-                console.error(e);
-            };
-
             ws.onclose = () => {
                 statusText.innerText = "ESTADO: DESCONECTADO";
-                statusText.style.color = "#8b949e";
-                startBtn.innerText = "Iniciar Llamada de Voz";
                 ws = null;
-                addLog("Conexion cerrada.");
+                addLog("Conexion terminada.");
             };
 
         } catch (err) {
-            addLog("Error: Permisos de microfono denegados.");
+            addLog("Error al iniciar.");
         }
     };
 
@@ -109,6 +92,5 @@
         source.start();
     }
 </script>
-
 </body>
 </html>
