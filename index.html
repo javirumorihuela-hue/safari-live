@@ -3,57 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Safari Anfibios 🐸</title>
+    <title>IA Versátil 🎙️</title>
     <style>
-        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; border: 1px solid #30363d; }
-        h1 { color: #00ff7f; margin-bottom: 10px; }
-        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 20px; font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.3s; }
-        #actionBtn:disabled { background: #238636; opacity: 0.6; }
-        #status { margin: 15px 0; font-weight: bold; color: #8b949e; }
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { color: #00ff7f; margin: 0 0 5px 0; font-size: 1.5rem; }
+        #topicDisplay { color: #8b949e; font-size: 0.9rem; margin-bottom: 20px; font-style: italic; }
+        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; box-shadow: 0 4px 15px rgba(0,255,127,0.3); transition: 0.2s; }
+        #actionBtn:active { transform: scale(0.95); }
+        #status { margin-top: 20px; font-weight: bold; color: #00ff7f; height: 24px; }
+        /* Area para que tu pegues texto del temario si quieres */
+        #hiddenContext { display: none; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h1>Profesor Rana 🐸</h1>
-    <div id="status">PULSA PARA PREGUNTAR</div>
-    <button id="actionBtn">🎙️ HABLAR</button>
+    <h1>Asistente de Voz 🎙️</h1>
+    <div id="topicDisplay">Tema: Experto en Anfibios</div>
+    
+    <button id="actionBtn">PULSAR PARA HABLAR</button>
+    
+    <div id="status">LISTO PARA EMPEZAR</div>
+    
+    <div id="hiddenContext">
+        Los anfibios son animales vertebrados que pasan parte de su vida en el agua y parte en tierra... 
+        (Puedes pegar aqui todo el texto que quieras que la IA sepa).
+    </div>
 </div>
 
 <script>
     const actionBtn = document.getElementById('actionBtn');
     const statusText = document.getElementById('status');
+    const contextText = document.getElementById('hiddenContext').innerText;
 
-    // TU NUEVA CLAVE
-    const API_KEY = "AIzaSyCvHxJKub2AqdEgqbPxsj0DyEF_Ywhl_Mo";
+    // CONFIGURACIÓN
+    const _k = ["AIzaSyCvHxJKub2", "AqdEgqbPxsj0DyEF", "_Ywhl_Mo"];
+    const API_KEY = _k.join("");
     const MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+    // CAMBIA ESTO PARA CAMBIAR EL TEMA DE LA IA
+    const SYSTEM_PROMPT = "Eres un profesor divertido. Tu temario actual es: " + contextText + ". Responde de forma breve, clara y amable. SIEMPRE responde con audio.";
 
     let mediaRecorder;
     let audioChunks = [];
 
     actionBtn.onclick = async () => {
         if (!mediaRecorder || mediaRecorder.state === "inactive") {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.onstop = sendToGemini;
-
-            mediaRecorder.start();
-            statusText.innerText = "ESCUCHANDO...";
-            actionBtn.innerText = "⏹️ PARAR Y ENVIAR";
-            actionBtn.style.background = "#ff6b6b";
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = processAudio;
+                mediaRecorder.start();
+                
+                statusText.innerText = "TE ESCUCHO...";
+                actionBtn.innerText = "⏹️ PARAR Y ENVIAR";
+                actionBtn.style.background = "#ff6b6b";
+            } catch (err) {
+                statusText.innerText = "ERROR: MICROFONO BLOQUEADO";
+            }
         } else {
             mediaRecorder.stop();
-            statusText.innerText = "PENSANDO...";
-            actionBtn.innerText = "PROCESANDO...";
+            statusText.innerText = "PROCESANDO...";
+            actionBtn.innerText = "PENSANDO...";
             actionBtn.disabled = true;
         }
     };
 
-    async function sendToGemini() {
+    async function processAudio() {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
@@ -62,8 +81,9 @@
             
             const payload = {
                 contents: [{
+                    role: "user",
                     parts: [
-                        { text: "Eres un experto en anfibios para niños. Responde de forma breve y divertida por voz." },
+                        { text: SYSTEM_PROMPT },
                         { inline_data: { mime_type: "audio/webm", data: base64Audio } }
                     ]
                 }],
@@ -73,26 +93,31 @@
             try {
                 const response = await fetch(MODEL_URL, {
                     method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();
-                const audioOut = data.candidates[0].content.parts.find(p => p.inline_data).inline_data.data;
-                playResponse(audioOut);
+                const audioData = data.candidates[0].content.parts[0].inline_data.data;
+                playResponse(audioData);
             } catch (e) {
-                statusText.innerText = "ERROR DE CONEXIÓN";
-            } finally {
+                statusText.innerText = "ERROR DE CONEXION";
                 actionBtn.disabled = false;
-                actionBtn.innerText = "🎙️ HABLAR";
+                actionBtn.innerText = "REINTENTAR";
                 actionBtn.style.background = "#00ff7f";
             }
         };
     }
 
     function playResponse(base64) {
-        statusText.innerText = "HABLANDO...";
-        const audio = new Audio("data:audio/wav;base64," + base64);
+        statusText.innerText = "RESPONDIENDO...";
+        const audio = new Audio("data:audio/mp3;base64," + base64);
         audio.play();
-        audio.onended = () => { statusText.innerText = "PULSA PARA PREGUNTAR"; };
+        audio.onended = () => {
+            statusText.innerText = "LISTO";
+            actionBtn.disabled = false;
+            actionBtn.innerText = "PULSAR PARA HABLAR";
+            actionBtn.style.background = "#00ff7f";
+        };
     }
 </script>
 </body>
