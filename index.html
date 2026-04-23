@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profesor IA - Final</title>
+    <title>Profesor IA - Version Estable</title>
     <style>
         body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
         .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
         h1 { color: #00ff7f; margin: 0 0 10px 0; }
-        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; }
+        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
         #actionBtn:disabled { background: #238636; opacity: 0.5; }
         #status { margin-top: 20px; font-weight: bold; color: #8b949e; }
-        #debug { display: none; background: #2a1111; color: #ffbaba; padding: 10px; border-radius: 10px; margin-top: 15px; font-size: 0.8rem; text-align: left; }
+        #debug { display: none; background: #2a1111; color: #ffbaba; padding: 15px; border-radius: 10px; margin-top: 15px; font-size: 0.8rem; text-align: left; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h1>Profesor IA 🎙️</h1>
-    <div id="status">CARGANDO...</div>
+    <div id="status">CARGANDO TEMARIO...</div>
     <button id="actionBtn" disabled>🎙️ MANTENER PARA HABLAR</button>
     <div id="debug"></div>
 </div>
@@ -29,19 +29,20 @@
     const debugDiv = document.getElementById('debug');
 
     let contextoTemario = "";
+    // Usamos tu clave de la API
     const API_KEY = "AIzaSyCvHxJKub2AqdEgqbPxsj0DyEF_Ywhl_Mo";
     
-    // CAMBIO CLAVE: Usamos gemini-1.5-flash-latest que es el modelo más compatible
-    const MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`;
+    // MODELO ESTRÍCTAMENTE IGUAL AL DE TU EJEMPLO: gemini-flash-latest
+    const MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`;
 
     async function cargarTemario() {
         try {
             const response = await fetch('temario.txt?nocache=' + new Date().getTime());
-            contextoTemario = response.ok ? await response.text() : "Eres un profesor amable.";
-            statusText.innerText = "LISTO PARA LA CLASE";
+            contextoTemario = response.ok ? await response.text() : "Eres un profesor divertido.";
+            statusText.innerText = "LISTO";
             actionBtn.disabled = false;
         } catch (err) {
-            contextoTemario = "Eres un profesor amable.";
+            contextoTemario = "Eres un profesor divertido.";
             actionBtn.disabled = false;
         }
     }
@@ -85,11 +86,13 @@
             const payload = {
                 contents: [{
                     parts: [
-                        { text: "Responde de forma muy breve por voz basándote en esto: " + contextoTemario },
+                        { text: "INSTRUCCIONES: Responde brevemente por voz basándote en este temario: " + contextoTemario },
                         { inline_data: { mime_type: "audio/webm", data: base64Audio } }
                     ]
                 }],
-                generationConfig: { response_modalities: ["audio"] }
+                generationConfig: { 
+                    response_modalities: ["audio"] 
+                }
             };
 
             try {
@@ -105,11 +108,16 @@
                     throw new Error(data.error ? data.error.message : "Error desconocido");
                 }
 
-                const audioOut = data.candidates[0].content.parts.find(p => p.inline_data).inline_data.data;
-                const audio = new Audio("data:audio/wav;base64," + audioOut);
-                statusText.innerText = "🔊 HABLANDO...";
-                audio.play();
-                audio.onended = () => statusText.innerText = "LISTO";
+                // Extraemos el audio de la respuesta
+                const audioPart = data.candidates[0].content.parts.find(p => p.inline_data);
+                if (audioPart) {
+                    const audio = new Audio("data:audio/wav;base64," + audioPart.inline_data.data);
+                    statusText.innerText = "🔊 HABLANDO...";
+                    audio.play();
+                    audio.onended = () => statusText.innerText = "LISTO";
+                } else {
+                    throw new Error("La IA no devolvió audio");
+                }
             } catch (err) {
                 statusText.innerText = "❌ FALLO";
                 debugDiv.innerText = "Error: " + err.message;
