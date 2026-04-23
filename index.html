@@ -3,76 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IA Versátil 🎙️</title>
+    <title>Profesor IA Dinamico</title>
     <style>
         body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h1 { color: #00ff7f; margin: 0 0 5px 0; font-size: 1.5rem; }
-        #topicDisplay { color: #8b949e; font-size: 0.9rem; margin-bottom: 20px; font-style: italic; }
-        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; box-shadow: 0 4px 15px rgba(0,255,127,0.3); transition: 0.2s; }
-        #actionBtn:active { transform: scale(0.95); }
-        #status { margin-top: 20px; font-weight: bold; color: #00ff7f; height: 24px; }
-        /* Area para que tu pegues texto del temario si quieres */
-        #hiddenContext { display: none; }
+        .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
+        h1 { color: #00ff7f; margin: 0 0 10px 0; }
+        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
+        #actionBtn:disabled { background: #238636; opacity: 0.5; }
+        #status { margin-top: 20px; font-weight: bold; color: #8b949e; }
+        #temarioStatus { font-size: 0.7rem; color: #00ff7f; margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h1>Asistente de Voz 🎙️</h1>
-    <div id="topicDisplay">Tema: Experto en Anfibios</div>
+    <h1>Profesor IA 🎙️</h1>
+    <div id="status">CARGANDO TEMARIO...</div>
+    <div id="temarioStatus"></div>
     
-    <button id="actionBtn">PULSAR PARA HABLAR</button>
-    
-    <div id="status">LISTO PARA EMPEZAR</div>
-    
-    <div id="hiddenContext">
-        Los anfibios son animales vertebrados que pasan parte de su vida en el agua y parte en tierra... 
-        (Puedes pegar aqui todo el texto que quieras que la IA sepa).
-    </div>
+    <button id="actionBtn" disabled>🎙️ MANTENER PARA HABLAR</button>
 </div>
 
 <script>
     const actionBtn = document.getElementById('actionBtn');
     const statusText = document.getElementById('status');
-    const contextText = document.getElementById('hiddenContext').innerText;
+    const temarioStatus = document.getElementById('temarioStatus');
 
-    // CONFIGURACIÓN
-    const _k = ["AIzaSyCvHxJKub2", "AqdEgqbPxsj0DyEF", "_Ywhl_Mo"];
-    const API_KEY = _k.join("");
+    let contextoTemario = "";
+    const _parts = ["AIzaSyCvHxJKub2", "AqdEgqbPxsj0DyEF", "_Ywhl_Mo"];
+    const API_KEY = _parts.join("");
     const MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
-    // CAMBIA ESTO PARA CAMBIAR EL TEMA DE LA IA
-    const SYSTEM_PROMPT = "Eres un profesor divertido. Tu temario actual es: " + contextText + ". Responde de forma breve, clara y amable. SIEMPRE responde con audio.";
+    // --- CARGA AUTOMATICA DEL ARCHIVO ---
+    async function cargarTemario() {
+        try {
+            const response = await fetch('temario.txt?nocache=' + new Date().getTime());
+            if (!response.ok) throw new Error();
+            contextoTemario = await response.text();
+            statusText.innerText = "LISTO PARA LA CLASE";
+            temarioStatus.innerText = "✅ Temario cargado correctamente";
+            actionBtn.disabled = false;
+        } catch (err) {
+            statusText.innerText = "ERROR AL CARGAR TEMARIO";
+            temarioStatus.innerText = "⚠️ No se encuentra temario.txt en GitHub";
+        }
+    }
 
+    cargarTemario();
+
+    // --- LOGICA DE AUDIO ---
     let mediaRecorder;
     let audioChunks = [];
 
-    actionBtn.onclick = async () => {
-        if (!mediaRecorder || mediaRecorder.state === "inactive") {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                mediaRecorder.onstop = processAudio;
-                mediaRecorder.start();
-                
-                statusText.innerText = "TE ESCUCHO...";
-                actionBtn.innerText = "⏹️ PARAR Y ENVIAR";
-                actionBtn.style.background = "#ff6b6b";
-            } catch (err) {
-                statusText.innerText = "ERROR: MICROFONO BLOQUEADO";
-            }
-        } else {
-            mediaRecorder.stop();
-            statusText.innerText = "PROCESANDO...";
-            actionBtn.innerText = "PENSANDO...";
-            actionBtn.disabled = true;
+    actionBtn.onmousedown = actionBtn.ontouchstart = async (e) => {
+        e.preventDefault();
+        audioChunks = [];
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+            mediaRecorder.onstop = sendToGemini;
+            mediaRecorder.start();
+            statusText.innerText = "🔴 ESCUCHANDO...";
+            actionBtn.style.background = "#ff6b6b";
+        } catch (err) {
+            statusText.innerText = "ERROR DE MICROFONO";
         }
     };
 
-    async function processAudio() {
+    actionBtn.onmouseup = actionBtn.ontouchend = () => {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+            statusText.innerText = "⌛ PROCESANDO...";
+            actionBtn.style.background = "#00ff7f";
+        }
+    };
+
+    async function sendToGemini() {
         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
@@ -81,9 +88,8 @@
             
             const payload = {
                 contents: [{
-                    role: "user",
                     parts: [
-                        { text: SYSTEM_PROMPT },
+                        { text: "Eres un profesor. Usa esta informacion para responder de forma breve: " + contextoTemario },
                         { inline_data: { mime_type: "audio/webm", data: base64Audio } }
                     ]
                 }],
@@ -93,30 +99,19 @@
             try {
                 const response = await fetch(MODEL_URL, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();
-                const audioData = data.candidates[0].content.parts[0].inline_data.data;
-                playResponse(audioData);
-            } catch (e) {
-                statusText.innerText = "ERROR DE CONEXION";
-                actionBtn.disabled = false;
-                actionBtn.innerText = "REINTENTAR";
-                actionBtn.style.background = "#00ff7f";
+                const audioOut = data.candidates[0].content.parts.find(p => p.inline_data).inline_data.data;
+                
+                const audio = new Audio("data:audio/wav;base64," + audioOut);
+                statusText.innerText = "🔊 HABLANDO...";
+                audio.play();
+                audio.onended = () => statusText.innerText = "LISTO PARA LA CLASE";
+            } catch (err) {
+                statusText.innerText = "ERROR DE RESPUESTA";
+                console.error(err);
             }
-        };
-    }
-
-    function playResponse(base64) {
-        statusText.innerText = "RESPONDIENDO...";
-        const audio = new Audio("data:audio/mp3;base64," + base64);
-        audio.play();
-        audio.onended = () => {
-            statusText.innerText = "LISTO";
-            actionBtn.disabled = false;
-            actionBtn.innerText = "PULSAR PARA HABLAR";
-            actionBtn.style.background = "#00ff7f";
         };
     }
 </script>
