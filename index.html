@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profesor IA Estable</title>
+    <title>Profesor IA Diagnóstico</title>
     <style>
         body { background: #0d1117; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
         .card { background: #161b22; padding: 2rem; border-radius: 20px; text-align: center; width: 90%; max-width: 450px; border: 1px solid #30363d; }
         h1 { color: #00ff7f; margin: 0 0 10px 0; }
-        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.2s; }
-        #actionBtn:disabled { background: #238636; opacity: 0.5; }
+        #actionBtn { background: #00ff7f; color: #0d1117; border: none; padding: 25px; font-size: 1.3rem; font-weight: bold; border-radius: 50px; cursor: pointer; width: 100%; }
         #status { margin-top: 20px; font-weight: bold; color: #8b949e; }
-        #temarioStatus { font-size: 0.7rem; color: #00ff7f; margin-top: 10px; }
+        /* Cuadro de error detallado */
+        #errorLog { display: none; background: #2a1111; color: #ffbaba; border: 1px solid #ff6b6b; padding: 15px; border-radius: 10px; margin-top: 20px; text-align: left; font-family: monospace; font-size: 0.8rem; overflow-wrap: break-word; }
     </style>
 </head>
 <body>
@@ -19,20 +19,22 @@
 <div class="card">
     <h1>Profesor IA 🎙️</h1>
     <div id="status">INICIANDO...</div>
-    <div id="temarioStatus"></div>
     <button id="actionBtn" disabled>🎙️ MANTENER PARA HABLAR</button>
+    
+    <div id="errorLog">
+        <strong>Detalle del error:</strong><br>
+        <span id="errorMsg"></span>
+    </div>
 </div>
 
 <script>
     const actionBtn = document.getElementById('actionBtn');
     const statusText = document.getElementById('status');
-    const temarioStatus = document.getElementById('temarioStatus');
+    const errorLog = document.getElementById('errorLog');
+    const errorMsg = document.getElementById('errorMsg');
 
     let contextoTemario = "";
-    // Tu clave actual integrada
     const API_KEY = "AIzaSyCvHxJKub2AqdEgqbPxsj0DyEF_Ywhl_Mo";
-    
-    // MODELO ESTABLE SEGÚN TU EJERCICIO
     const MODEL_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
     async function cargarTemario() {
@@ -40,14 +42,12 @@
             const response = await fetch('temario.txt?nocache=' + new Date().getTime());
             contextoTemario = response.ok ? await response.text() : "Eres un profesor amable.";
             statusText.innerText = "LISTO";
-            temarioStatus.innerText = "✅ Sistema preparado";
             actionBtn.disabled = false;
         } catch (err) {
             contextoTemario = "Eres un profesor amable.";
             actionBtn.disabled = false;
         }
     }
-
     cargarTemario();
 
     let mediaRecorder;
@@ -55,6 +55,7 @@
 
     actionBtn.onmousedown = actionBtn.ontouchstart = async (e) => {
         e.preventDefault();
+        errorLog.style.display = "none";
         audioChunks = [];
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -65,14 +66,14 @@
             statusText.innerText = "🔴 ESCUCHANDO...";
             actionBtn.style.background = "#ff6b6b";
         } catch (err) {
-            statusText.innerText = "ERROR DE MICROFONO";
+            mostrarError("Microfono no accesible: " + err.message);
         }
     };
 
     actionBtn.onmouseup = actionBtn.ontouchend = () => {
         if (mediaRecorder && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
-            statusText.innerText = "⌛ PENSANDO...";
+            statusText.innerText = "⌛ PROCESANDO...";
             actionBtn.style.background = "#00ff7f";
         }
     };
@@ -84,11 +85,10 @@
         reader.onloadend = async () => {
             const base64Audio = reader.result.split(',')[1];
             
-            // PAYLOAD ADAPTADO A LA VERSIÓN ESTABLE
             const payload = {
                 contents: [{
                     parts: [
-                        { text: "INSTRUCCIONES: Responde siempre de forma breve y por audio basándote en este temario: " + contextoTemario },
+                        { text: "Responde brevemente por voz: " + contextoTemario },
                         { inline_data: { mime_type: "audio/webm", data: base64Audio } }
                     ]
                 }],
@@ -103,16 +103,31 @@
                 });
                 
                 const data = await response.json();
-                const audioOut = data.candidates[0].content.parts.find(p => p.inline_data).inline_data.data;
-                
-                const audio = new Audio("data:audio/wav;base64," + audioOut);
-                statusText.innerText = "🔊 HABLANDO...";
-                audio.play();
-                audio.onended = () => statusText.innerText = "LISTO";
+
+                if (!response.ok) {
+                    mostrarError(`HTTP ${response.status}: ${data.error ? data.error.message : 'Error desconocido'}`);
+                    return;
+                }
+
+                if (data.candidates && data.candidates[0].content.parts[0].inline_data) {
+                    const audioOut = data.candidates[0].content.parts[0].inline_data.data;
+                    const audio = new Audio("data:audio/wav;base64," + audioOut);
+                    statusText.innerText = "🔊 HABLANDO...";
+                    audio.play();
+                    audio.onended = () => statusText.innerText = "LISTO";
+                } else {
+                    mostrarError("La IA no devolvió audio. Respuesta: " + JSON.stringify(data));
+                }
             } catch (err) {
-                statusText.innerText = "ERROR DE RESPUESTA";
+                mostrarError("Error de red: " + err.message);
             }
         };
+    }
+
+    function mostrarError(msg) {
+        statusText.innerText = "❌ ERROR";
+        errorMsg.innerText = msg;
+        errorLog.style.display = "block";
     }
 </script>
 </body>
